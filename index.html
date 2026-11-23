@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="STB ServicePro" />
+  <link rel="manifest" href="./manifest.json" />
   <link id="dynamicAppIcon" rel="icon" type="image/png" />
   <link id="dynamicAppleIcon" rel="apple-touch-icon" />
   <script>
@@ -47,6 +48,10 @@
         const appleEl = document.getElementById('dynamicAppleIcon');
         if (iconEl) iconEl.href = png192;
         if (appleEl) appleEl.href = png192;
+
+        if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+          navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
+        }
       } catch (e) {}
     })();
   </script>
