@@ -1341,7 +1341,7 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- APPLICATION LOGIC (FIREBASE CLOUD SYNC + AUTO BACKUPS + LAN FALLBACK) -->
+  <!-- APPLICATION LOGIC (FIREBASE CHUNKED CLOUD SYNC + AUTO BACKUPS + LAN)  -->
   <!-- ===================================================================== -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -1390,6 +1390,7 @@
     const STORAGE_KEY_CUSTOMERS = 'stb_servicepro_customers_v3';
     const STORAGE_KEY_REPAIRS = 'stb_servicepro_repairs_v3';
     const STORAGE_KEY_USERS = 'stb_servicepro_users_v3';
+    const STORAGE_KEY_UPDATED_AT = 'stb_servicepro_updated_at_v3';
     const STORAGE_KEY_BACKUP_CFG = 'stb_servicepro_autobackup_cfg_v1';
     const STORAGE_KEY_LOCAL_SNAPSHOTS = 'stb_servicepro_local_snapshots_v1';
     const SESSION_KEY_USER = 'stb_servicepro_session_user_v3';
@@ -1424,7 +1425,10 @@
     let cloudSnapshots = [];
     let lastSyncedPayloadHash = '';
     let lastSyncedTimestamp = 0;
+    let localDataUpdatedAt = 0;
     let isApplyingRemoteSync = false;
+    let isSavingToCloud = false;
+    let suppressRemoteOverwriteUntil = 0;
     let pendingExcelImport = null;
     let lastLoadedExcelRows = null;
     let batchPrintTicketIds = [];
@@ -1584,6 +1588,71 @@
         !(Array.isArray(c.serials) && c.serials.length > 0 && c.serials.every(isBogusSummarySerial))
       );
       return repairs.length !== beforeR || customers.length !== beforeC;
+    }
+
+    // =========================================================================
+    // CHUNKED FIRESTORE HELPERS (BYPASSES 1MB SINGLE-DOC LIMIT FOR 5,000+ ROWS)
+    // =========================================================================
+    function splitStringIntoChunks(str, maxBytes = 650000) {
+      const chunks = [];
+      for (let i = 0; i < str.length; i += maxBytes) {
+        chunks.push(str.slice(i, i + maxBytes));
+      }
+      return chunks;
+    }
+
+    async function writeChunkedStateToFirestore(sdk, appId, payload) {
+      const jsonStr = JSON.stringify({
+        customers: payload.customers || [],
+        repairs: payload.repairs || [],
+        users: payload.users || appUsers
+      });
+      const chunks = splitStringIntoChunks(jsonStr, 650000);
+      const stateRef = sdk.doc(cloudDb, 'artifacts', appId, 'public', 'data', 'stb_servicepro_state', 'master');
+
+      for (let idx = 0; idx < chunks.length; idx++) {
+        const chunkRef = sdk.doc(cloudDb, 'artifacts', appId, 'public', 'data', 'stb_servicepro_state', `chunk_${idx}`);
+        await sdk.setDoc(chunkRef, {
+          index: idx,
+          data: chunks[idx],
+          updatedAt: payload.updatedAt
+        });
+      }
+
+      await sdk.setDoc(stateRef, {
+        isChunked: true,
+        chunkCount: chunks.length,
+        customerCount: (payload.customers || []).length,
+        repairCount: (payload.repairs || []).length,
+        users: payload.users || appUsers,
+        updatedAt: payload.updatedAt
+      });
+    }
+
+    async function readChunkedStateFromFirestore(sdk, appId, masterData) {
+      if (!masterData) return null;
+      if (masterData.isChunked && masterData.chunkCount > 0) {
+        const parts = [];
+        for (let idx = 0; idx < masterData.chunkCount; idx++) {
+          const chunkRef = sdk.doc(cloudDb, 'artifacts', appId, 'public', 'data', 'stb_servicepro_state', `chunk_${idx}`);
+          const chunkSnap = await sdk.getDoc(chunkRef);
+          if (!chunkSnap.exists()) {
+            throw new Error(`Missing cloud chunk ${idx + 1}/${masterData.chunkCount}`);
+          }
+          parts.push(chunkSnap.data().data || '');
+        }
+        const parsed = JSON.parse(parts.join(''));
+        return {
+          customers: parsed.customers || [],
+          repairs: parsed.repairs || [],
+          users: parsed.users || masterData.users || appUsers,
+          updatedAt: masterData.updatedAt || Date.now()
+        };
+      }
+      if (Array.isArray(masterData.repairs)) {
+        return masterData;
+      }
+      return null;
     }
 
     // =========================================================================
@@ -2147,29 +2216,36 @@
         const rawC = localStorage.getItem(STORAGE_KEY_CUSTOMERS);
         const rawR = localStorage.getItem(STORAGE_KEY_REPAIRS);
         const rawU = localStorage.getItem(STORAGE_KEY_USERS);
+        const rawTs = localStorage.getItem(STORAGE_KEY_UPDATED_AT);
         const rawCfg = localStorage.getItem(STORAGE_KEY_BACKUP_CFG);
         const rawSnaps = localStorage.getItem(STORAGE_KEY_LOCAL_SNAPSHOTS);
 
         customers = rawC ? JSON.parse(rawC) : [];
         repairs = rawR ? JSON.parse(rawR) : [];
         appUsers = rawU && JSON.parse(rawU).length > 0 ? JSON.parse(rawU) : JSON.parse(JSON.stringify(DEFAULT_USERS));
+        localDataUpdatedAt = rawTs ? Number(rawTs) || 0 : 0;
         if (rawCfg) autoBackupConfig = { ...autoBackupConfig, ...JSON.parse(rawCfg) };
         if (rawSnaps) cloudSnapshots = JSON.parse(rawSnaps);
       } catch (e) {
         customers = [];
         repairs = [];
         appUsers = JSON.parse(JSON.stringify(DEFAULT_USERS));
+        localDataUpdatedAt = 0;
       }
       if (!appUsers || appUsers.length === 0) {
         appUsers = JSON.parse(JSON.stringify(DEFAULT_USERS));
       }
     }
 
-    function saveStateToLocal() {
+    function saveStateToLocal(customTimestamp) {
       try {
+        if (customTimestamp) {
+          localDataUpdatedAt = customTimestamp;
+        }
         localStorage.setItem(STORAGE_KEY_CUSTOMERS, JSON.stringify(customers));
         localStorage.setItem(STORAGE_KEY_REPAIRS, JSON.stringify(repairs));
         localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(appUsers));
+        localStorage.setItem(STORAGE_KEY_UPDATED_AT, String(localDataUpdatedAt));
         localStorage.setItem(STORAGE_KEY_BACKUP_CFG, JSON.stringify(autoBackupConfig));
       } catch (e) {
         console.warn('LocalStorage save warning:', e);
@@ -2281,21 +2357,30 @@
           cloudLastError = '';
           lastSyncedTimestamp = Date.now();
           if (initialSnap.exists()) {
-            const remote = initialSnap.data();
-            if (remote && Array.isArray(remote.repairs)) {
-              customers = remote.customers || [];
-              repairs = remote.repairs || [];
-              if (Array.isArray(remote.users) && remote.users.length > 0) {
-                appUsers = remote.users;
+            const masterMeta = initialSnap.data();
+            const remoteUpdatedAt = Number(masterMeta.updatedAt) || 0;
+            const localHasNewerData = (repairs.length > 0 || customers.length > 0) && localDataUpdatedAt > remoteUpdatedAt;
+
+            if (localHasNewerData) {
+              // Local data (e.g., recently restored JSON backup) is newer than cloud — push it up!
+              await saveState();
+            } else {
+              const remote = await readChunkedStateFromFirestore(sdk, appId, masterMeta);
+              if (remote && Array.isArray(remote.repairs)) {
+                customers = remote.customers || [];
+                repairs = remote.repairs || [];
+                if (Array.isArray(remote.users) && remote.users.length > 0) {
+                  appUsers = remote.users;
+                }
+                normalizeAllRecordsInPlace();
+                purgeBogusSummaryRecords();
+                saveStateToLocal(remoteUpdatedAt || Date.now());
+                lastSyncedPayloadHash = JSON.stringify({ c: customers.length, r: repairs.length, u: appUsers.length, t: remoteUpdatedAt });
+                if (currentUser) renderAll();
               }
-              normalizeAllRecordsInPlace();
-              purgeBogusSummaryRecords();
-              saveStateToLocal();
-              lastSyncedPayloadHash = JSON.stringify({ c: customers.length, r: repairs.length, u: appUsers.length, t: remote.updatedAt });
-              if (currentUser) renderAll();
             }
           } else if (repairs.length > 0 || customers.length > 0) {
-            await sdk.setDoc(stateRef, { customers, repairs, users: appUsers, updatedAt: Date.now() });
+            await saveState();
           }
           updateSyncStatusUI();
         } catch (readErr) {
@@ -2308,27 +2393,43 @@
         }
 
         if (cloudUnsubscribeState) cloudUnsubscribeState();
-        cloudUnsubscribeState = sdk.onSnapshot(stateRef, (snap) => {
+        cloudUnsubscribeState = sdk.onSnapshot(stateRef, async (snap) => {
           cloudConnected = true;
           cloudLastError = '';
           lastSyncedTimestamp = Date.now();
-          if (snap.exists() && !isApplyingRemoteSync) {
-            const remote = snap.data();
-            if (remote && Array.isArray(remote.repairs)) {
-              const incomingHash = JSON.stringify({ c: remote.customers?.length, r: remote.repairs?.length, u: remote.users?.length, t: remote.updatedAt });
-              if (incomingHash !== lastSyncedPayloadHash) {
+          if (snap.exists() && !isApplyingRemoteSync && !isSavingToCloud && Date.now() >= suppressRemoteOverwriteUntil) {
+            const meta = snap.data();
+            const remoteUpdatedAt = Number(meta.updatedAt) || 0;
+            // Ignore snapshots that are older than our local state
+            if (remoteUpdatedAt < localDataUpdatedAt) {
+              return;
+            }
+            const incomingHash = JSON.stringify({
+              c: meta.customerCount ?? meta.customers?.length,
+              r: meta.repairCount ?? meta.repairs?.length,
+              u: meta.users?.length,
+              t: remoteUpdatedAt
+            });
+            if (incomingHash !== lastSyncedPayloadHash) {
+              try {
                 isApplyingRemoteSync = true;
-                customers = remote.customers || [];
-                repairs = remote.repairs || [];
-                if (Array.isArray(remote.users) && remote.users.length > 0) {
-                  appUsers = remote.users;
+                const remote = await readChunkedStateFromFirestore(sdk, appId, meta);
+                if (remote && Array.isArray(remote.repairs)) {
+                  customers = remote.customers || [];
+                  repairs = remote.repairs || [];
+                  if (Array.isArray(remote.users) && remote.users.length > 0) {
+                    appUsers = remote.users;
+                  }
+                  normalizeAllRecordsInPlace();
+                  purgeBogusSummaryRecords();
+                  saveStateToLocal(remoteUpdatedAt || Date.now());
+                  lastSyncedPayloadHash = incomingHash;
+                  if (currentUser) renderAll();
                 }
-                normalizeAllRecordsInPlace();
-                purgeBogusSummaryRecords();
-                saveStateToLocal();
-                lastSyncedPayloadHash = incomingHash;
+              } catch (chunkErr) {
+                console.warn('Error assembling cloud chunks:', chunkErr);
+              } finally {
                 isApplyingRemoteSync = false;
-                if (currentUser) renderAll();
               }
             }
           } else if (!snap.exists() && (repairs.length > 0 || customers.length > 0)) {
@@ -2382,8 +2483,13 @@
         if (json && json.ok) {
           lanServerConnected = true;
           lastSyncedTimestamp = Date.now();
-          if (json.exists && json.data) {
-            const incomingHash = JSON.stringify({ c: json.data.customers?.length, r: json.data.repairs?.length, u: json.data.users?.length, t: json.data.updatedAt });
+          if (json.exists && json.data && !isSavingToCloud && Date.now() >= suppressRemoteOverwriteUntil) {
+            const remoteUpdatedAt = Number(json.data.updatedAt) || 0;
+            if (remoteUpdatedAt < localDataUpdatedAt) {
+              await saveState();
+              return;
+            }
+            const incomingHash = JSON.stringify({ c: json.data.customers?.length, r: json.data.repairs?.length, u: json.data.users?.length, t: remoteUpdatedAt });
             if (incomingHash !== lastSyncedPayloadHash) {
               customers = json.data.customers || [];
               repairs = json.data.repairs || [];
@@ -2392,7 +2498,7 @@
               }
               normalizeAllRecordsInPlace();
               purgeBogusSummaryRecords();
-              saveStateToLocal();
+              saveStateToLocal(remoteUpdatedAt || Date.now());
               lastSyncedPayloadHash = incomingHash;
               if (currentUser) renderAll();
             }
@@ -2407,8 +2513,9 @@
     }
 
     async function saveState() {
-      saveStateToLocal();
       const updatedAt = Date.now();
+      suppressRemoteOverwriteUntil = updatedAt + 12000;
+      saveStateToLocal(updatedAt);
       const payload = {
         customers,
         repairs,
@@ -2417,30 +2524,36 @@
       };
       lastSyncedPayloadHash = JSON.stringify({ c: customers.length, r: repairs.length, u: appUsers.length, t: updatedAt });
 
-      if (cloudConnected && cloudDb && window.__FirebaseSDK) {
-        try {
-          const sdk = window.__FirebaseSDK;
-          const appId = getWorkspaceAppId();
-          const stateRef = sdk.doc(cloudDb, 'artifacts', appId, 'public', 'data', 'stb_servicepro_state', 'master');
-          await sdk.setDoc(stateRef, payload);
-          lastSyncedTimestamp = updatedAt;
-        } catch (e) {
-          console.warn('Cloud save error:', e);
-        }
-      }
-
-      if (window.location.protocol !== 'file:' && window.location.protocol !== 'about:' && window.location.protocol !== 'blob:') {
-        try {
-          const res = await fetch('/api/state', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (res.ok) {
-            lanServerConnected = true;
+      isSavingToCloud = true;
+      try {
+        if (cloudConnected && cloudDb && window.__FirebaseSDK) {
+          try {
+            const sdk = window.__FirebaseSDK;
+            const appId = getWorkspaceAppId();
+            await writeChunkedStateToFirestore(sdk, appId, payload);
             lastSyncedTimestamp = updatedAt;
+            cloudLastError = '';
+          } catch (e) {
+            console.warn('Cloud save error:', e);
+            cloudLastError = `Cloud save error: ${e?.message || e}`;
           }
-        } catch (e) {}
+        }
+
+        if (window.location.protocol !== 'file:' && window.location.protocol !== 'about:' && window.location.protocol !== 'blob:') {
+          try {
+            const res = await fetch('/api/state', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+              lanServerConnected = true;
+              lastSyncedTimestamp = updatedAt;
+            }
+          } catch (e) {}
+        }
+      } finally {
+        isSavingToCloud = false;
       }
       updateSyncStatusUI();
     }
@@ -2469,7 +2582,7 @@
     }
 
     // =========================================================================
-    // AUTOMATIC & MANUAL BACKUP VAULT
+    // AUTOMATIC & MANUAL BACKUP VAULT (CHUNKED FOR CLOUD SAFETY)
     // =========================================================================
     function toggleAutoBackupSetting() {
       autoBackupConfig.enabled = document.getElementById('autoBackupEnabledToggle').checked;
@@ -2488,7 +2601,7 @@
     async function createCloudBackupSnapshot(label = 'Auto Backup') {
       const now = Date.now();
       const snapId = 'SNAP-' + now;
-      const snapshot = {
+      const fullSnapshot = {
         id: snapId,
         label,
         createdAt: now,
@@ -2502,7 +2615,7 @@
       autoBackupConfig.lastBackupAt = now;
       saveStateToLocal();
 
-      cloudSnapshots = [snapshot, ...cloudSnapshots.filter(s => s.id !== snapId)].slice(0, 8);
+      cloudSnapshots = [fullSnapshot, ...cloudSnapshots.filter(s => s.id !== snapId)].slice(0, 6);
       try {
         localStorage.setItem(STORAGE_KEY_LOCAL_SNAPSHOTS, JSON.stringify(cloudSnapshots));
       } catch (e) {}
@@ -2511,9 +2624,29 @@
         try {
           const sdk = window.__FirebaseSDK;
           const appId = getWorkspaceAppId();
+          const jsonStr = JSON.stringify({
+            customers: fullSnapshot.customers,
+            repairs: fullSnapshot.repairs,
+            users: fullSnapshot.users
+          });
+          const chunks = splitStringIntoChunks(jsonStr, 650000);
+          for (let idx = 0; idx < chunks.length; idx++) {
+            const cRef = sdk.doc(cloudDb, 'artifacts', appId, 'public', 'data', 'stb_servicepro_backup_chunks', `${snapId}_${idx}`);
+            await sdk.setDoc(cRef, { snapId, index: idx, data: chunks[idx] });
+          }
           const snapRef = sdk.doc(cloudDb, 'artifacts', appId, 'public', 'data', 'stb_servicepro_backups', snapId);
-          await sdk.setDoc(snapRef, snapshot);
-        } catch (e) {}
+          await sdk.setDoc(snapRef, {
+            id: snapId,
+            label,
+            createdAt: now,
+            repairCount: repairs.length,
+            customerCount: customers.length,
+            isChunked: true,
+            chunkCount: chunks.length
+          });
+        } catch (e) {
+          console.warn('Cloud snapshot save warning:', e);
+        }
       }
 
       renderCloudSnapshotsVault();
@@ -2567,12 +2700,41 @@
     async function restoreCloudSnapshot(snapId) {
       const snap = cloudSnapshots.find(s => s.id === snapId);
       if (!snap) return;
-      customers = snap.customers || [];
-      repairs = snap.repairs || [];
-      if (Array.isArray(snap.users) && snap.users.length > 0) appUsers = snap.users;
+
+      let restoredCustomers = snap.customers;
+      let restoredRepairs = snap.repairs;
+      let restoredUsers = snap.users;
+
+      if (!Array.isArray(restoredRepairs) && snap.isChunked && cloudConnected && cloudDb && window.__FirebaseSDK) {
+        try {
+          showToast('Downloading cloud snapshot chunks...', 'info');
+          const sdk = window.__FirebaseSDK;
+          const appId = getWorkspaceAppId();
+          const parts = [];
+          for (let idx = 0; idx < snap.chunkCount; idx++) {
+            const cRef = sdk.doc(cloudDb, 'artifacts', appId, 'public', 'data', 'stb_servicepro_backup_chunks', `${snap.id}_${idx}`);
+            const cSnap = await sdk.getDoc(cRef);
+            if (!cSnap.exists()) throw new Error('Snapshot chunk missing');
+            parts.push(cSnap.data().data || '');
+          }
+          const parsed = JSON.parse(parts.join(''));
+          restoredCustomers = parsed.customers || [];
+          restoredRepairs = parsed.repairs || [];
+          restoredUsers = parsed.users || appUsers;
+        } catch (err) {
+          showToast('Failed to download cloud snapshot.', 'error');
+          return;
+        }
+      }
+
+      if (!Array.isArray(restoredRepairs)) return;
+      suppressRemoteOverwriteUntil = Date.now() + 20000;
+      customers = restoredCustomers || [];
+      repairs = restoredRepairs || [];
+      if (Array.isArray(restoredUsers) && restoredUsers.length > 0) appUsers = restoredUsers;
       await saveState();
       renderAll();
-      showToast('Database restored from snapshot!', 'success');
+      showToast('Database restored from snapshot & synced to Cloud!', 'success');
     }
 
     function downloadJsonBackup() {
@@ -2602,9 +2764,10 @@
           if (!data || !Array.isArray(data.repairs)) {
             throw new Error('Invalid backup format: repairs array missing');
           }
-          if (repairs.length > 0) {
-            await createCloudBackupSnapshot('Pre-Restore Safety Backup');
-          }
+
+          // Lock out incoming cloud snapshots during restore & upload
+          suppressRemoteOverwriteUntil = Date.now() + 25000;
+          isSavingToCloud = true;
 
           customers = Array.isArray(data.customers) ? data.customers.map(c => ({
             ...c,
@@ -2632,10 +2795,15 @@
 
           normalizeAllRecordsInPlace();
           purgeBogusSummaryRecords();
+
+          // Render immediately & save to local + cloud
+          renderAll();
+          showToast(`Uploading ${repairs.length.toLocaleString()} records to Cloud...`, 'info');
           await saveState();
           renderAll();
-          showToast(`Successfully restored ${repairs.length.toLocaleString()} repairs & ${customers.length.toLocaleString()} customers!`, 'success');
+          showToast(`Restored & saved ${repairs.length.toLocaleString()} repairs to Cloud!`, 'success');
         } catch (err) {
+          isSavingToCloud = false;
           showToast('Invalid JSON backup file. Please select a valid STB_ServicePro_Backup .json file.', 'error');
         }
       };
