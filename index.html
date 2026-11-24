@@ -1470,8 +1470,15 @@
     function getWorkspaceAppId() {
       const urlParams = new URLSearchParams(window.location.search);
       const paramWs = urlParams.get('ws');
-      if (paramWs) return paramWs.trim();
-      return typeof __app_id !== 'undefined' ? __app_id : 'freesat-stb-servicepro-v1';
+      if (paramWs && paramWs.trim()) {
+        try { localStorage.setItem('stb_servicepro_saved_ws_v1', paramWs.trim()); } catch (e) {}
+        return paramWs.trim();
+      }
+      try {
+        const savedWs = localStorage.getItem('stb_servicepro_saved_ws_v1');
+        if (savedWs && savedWs.trim()) return savedWs.trim();
+      } catch (e) {}
+      return 'freesat-stb-servicepro-v1';
     }
 
     function getTodayISO() {
@@ -2387,7 +2394,9 @@
           if (initialSnap.exists()) {
             const masterMeta = initialSnap.data();
             const remoteUpdatedAt = Number(masterMeta.updatedAt) || 0;
-            const localHasNewerData = (repairs.length > 0 || customers.length > 0) && localDataUpdatedAt > remoteUpdatedAt;
+            const remoteRepairCount = Number(masterMeta.repairCount) || 0;
+            const localIsEmpty = repairs.length === 0 && customers.length === 0;
+            const localHasNewerData = !localIsEmpty && localDataUpdatedAt > remoteUpdatedAt && repairs.length >= remoteRepairCount;
 
             if (localHasNewerData) {
               await saveState();
@@ -2403,7 +2412,7 @@
                 purgeBogusSummaryRecords();
                 saveStateToLocal(remoteUpdatedAt || Date.now());
                 lastSyncedPayloadHash = JSON.stringify({ c: customers.length, r: repairs.length, u: appUsers.length, t: remoteUpdatedAt });
-                if (currentUser) renderAll();
+                renderAll();
               }
             }
           } else if (repairs.length > 0 || customers.length > 0) {
@@ -2427,7 +2436,8 @@
           if (snap.exists() && !isApplyingRemoteSync && !isSavingToCloud && Date.now() >= suppressRemoteOverwriteUntil) {
             const meta = snap.data();
             const remoteUpdatedAt = Number(meta.updatedAt) || 0;
-            if (remoteUpdatedAt < localDataUpdatedAt) {
+            const localIsEmpty = repairs.length === 0 && customers.length === 0;
+            if (!localIsEmpty && remoteUpdatedAt < localDataUpdatedAt) {
               return;
             }
             const incomingHash = JSON.stringify({
@@ -2436,7 +2446,7 @@
               u: meta.users?.length,
               t: remoteUpdatedAt
             });
-            if (incomingHash !== lastSyncedPayloadHash) {
+            if (incomingHash !== lastSyncedPayloadHash || localIsEmpty) {
               try {
                 isApplyingRemoteSync = true;
                 const remote = await readChunkedStateFromFirestore(sdk, appId, meta);
@@ -2450,7 +2460,7 @@
                   purgeBogusSummaryRecords();
                   saveStateToLocal(remoteUpdatedAt || Date.now());
                   lastSyncedPayloadHash = incomingHash;
-                  if (currentUser) renderAll();
+                  renderAll();
                 }
               } catch (chunkErr) {
                 console.warn('Error assembling cloud chunks:', chunkErr);
