@@ -635,24 +635,18 @@
             </div>
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">Received Accessories</label>
-              <select id="receivedAccessories" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+              <select id="receivedAccessories" onchange="toggleOtherAccessoriesInput()" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
                 <option value="STB Unit Only">STB Unit Only</option>
                 <option value="STB + Power Adapter">STB + Power Adapter</option>
                 <option value="STB + Remote + Adapter">STB + Remote + Adapter</option>
                 <option value="Full Box Set">Full Box Set</option>
+                <option value="Other">Other</option>
               </select>
+              <input type="text" id="otherAccessoriesInput" placeholder="Specify accessories..." class="hidden mt-2 w-full rounded-xl border border-blue-300 bg-blue-50/40 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
             <div class="sm:col-span-2 lg:col-span-3">
               <label class="block text-xs font-bold text-slate-700 mb-1">Reported Fault *</label>
-              <input type="text" id="faultNotes" required list="commonFaultsList" placeholder="e.g. No Power / Dead, No Signal, Boot Loop..." class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-              <datalist id="commonFaultsList">
-                <option value="No Power / Dead"></option>
-                <option value="No Signal / Tuner Fault"></option>
-                <option value="Stuck on Boot / Logo"></option>
-                <option value="HDMI / AV Output Fault"></option>
-                <option value="Remote Sensor / Front Panel Issue"></option>
-                <option value="Software / Firmware Update"></option>
-              </datalist>
+              <input type="text" id="faultNotes" required autocomplete="off" placeholder="Type reported fault manually (e.g. No Power / Dead, No Signal, Boot Loop...)" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
             </div>
           </div>
 
@@ -3008,6 +3002,21 @@
       document.getElementById('intakeWarrantyVoidContainer').classList.toggle('hidden', val !== 'Warranty Void');
     }
 
+    function toggleOtherAccessoriesInput() {
+      const selectEl = document.getElementById('receivedAccessories');
+      const otherInput = document.getElementById('otherAccessoriesInput');
+      if (!selectEl || !otherInput) return;
+      if (selectEl.value === 'Other') {
+        otherInput.classList.remove('hidden');
+        otherInput.required = true;
+        otherInput.focus();
+      } else {
+        otherInput.classList.add('hidden');
+        otherInput.required = false;
+        otherInput.value = '';
+      }
+    }
+
     function toggleEditWarrantyVoidCondition() {
       const val = document.getElementById('editWarranty').value;
       document.getElementById('editWarrantyVoidContainer').classList.toggle('hidden', val !== 'Warranty Void');
@@ -3058,6 +3067,12 @@
       document.getElementById('selectedCustomerId').value = '';
       document.getElementById('dateReceived').value = getTodayISO();
       document.getElementById('intakeWarrantyVoidContainer').classList.add('hidden');
+      const otherInput = document.getElementById('otherAccessoriesInput');
+      if (otherInput) {
+        otherInput.classList.add('hidden');
+        otherInput.required = false;
+        otherInput.value = '';
+      }
     }
 
     document.getElementById('intakeForm').addEventListener('submit', async function(e) {
@@ -3075,7 +3090,9 @@
       const dateReceived = document.getElementById('dateReceived').value || getTodayISO();
       const receivedVia = document.getElementById('receivedVia').value;
       const incomingWaybill = document.getElementById('incomingWaybill').value.trim();
-      const receivedAccessories = document.getElementById('receivedAccessories').value;
+      const accSelectVal = document.getElementById('receivedAccessories').value;
+      const accOtherVal = (document.getElementById('otherAccessoriesInput')?.value || '').trim();
+      const receivedAccessories = accSelectVal === 'Other' ? (accOtherVal || 'Other') : accSelectVal;
       const faultNotes = document.getElementById('faultNotes').value.trim();
 
       let custId = document.getElementById('selectedCustomerId').value;
@@ -3985,3 +4002,8 @@
   </script>
 </body>
 </html>
+```
+
+යාවත්කාලීන කරන ලද වෙනස්කම්:
+* **Received Accessories:** Dropdown එකට **"Other"** විකල්පය එක් කර ඇති අතර, එය තේරූ විගස පහළින් අමතර text box එකක් දිස්වී ඔබට අවශ්‍ය දේ type කළ හැක.
+* **Reported Fault \*:** Dropdown/suggestions (`datalist`) ඉවත් කර කෙලින්ම manual type කළ හැකි පරිදි සකසා ඇත.
