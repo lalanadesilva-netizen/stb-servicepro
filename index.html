@@ -993,10 +993,10 @@
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <input type="text" id="customerDirSearch" oninput="renderCustomerDirectory()" placeholder="Search Name, Phone, Address, Serial..." class="w-60 rounded-xl border border-slate-300 px-3 py-1.5 text-xs" />
-            <button type="button" onclick="openMergeDuplicatesModal()" class="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold">
+            <button type="button" id="btnMergeDuplicates" onclick="openMergeDuplicatesModal()" class="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold">
               <i class="fa-solid fa-object-group mr-1"></i>Merge Duplicates
             </button>
-            <button type="button" onclick="openExcelModal()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
+            <button type="button" id="btnImportExcel" onclick="openExcelModal()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
               <i class="fa-solid fa-file-excel mr-1"></i>Import Excel (.xlsx)
             </button>
             <button type="button" id="btnClearAllData" onclick="clearAllDataPrompt()" class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold">
@@ -1148,10 +1148,10 @@
               <input type="password" id="newUserPassword" required placeholder="••••••••" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
             </div>
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">Role</label>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Role & User Access Level</label>
               <select id="newUserRole" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold">
-                <option value="staff">Staff / Technician</option>
-                <option value="admin">Administrator (Full Access)</option>
+                <option value="staff">Staff / Technician (Intake, Dispatch, Print Labels, View Customers)</option>
+                <option value="admin">Administrator (Full Access + Import Excel, Reports, Users, Backups)</option>
               </select>
             </div>
             <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs">
@@ -1160,15 +1160,49 @@
           </form>
         </div>
 
-        <!-- Registered Users Table -->
+        <!-- Registered Users & Role Access Matrix Card -->
         <div class="lg:col-span-7 bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 sm:p-6 space-y-4">
-          <h3 class="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">Registered Cloud & Network Users</h3>
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+              <h3 class="text-base font-bold text-slate-900">Registered Users & Access Permissions</h3>
+              <p class="text-xs text-slate-500">Staff logins are restricted from Importing Excel, Deleting Data, Reports, and User Settings</p>
+            </div>
+          </div>
+
+          <!-- Role Access Permissions Summary -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div class="p-3 rounded-xl bg-blue-50/70 border border-blue-200 space-y-1">
+              <div class="font-extrabold text-blue-900 flex items-center gap-1.5">
+                <i class="fa-solid fa-shield-halved text-blue-600"></i>
+                <span>ADMINISTRATOR ACCESS</span>
+              </div>
+              <div class="text-[11px] text-blue-950/80 leading-relaxed">
+                ✓ Intake, Dispatch & Label Printing<br/>
+                ✓ Import Excel (.xlsx) & Merge Duplicates<br/>
+                ✓ Financial Reports, PDF Export & Clear Data<br/>
+                ✓ Create/Edit Users & Cloud Backups
+              </div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <div class="font-extrabold text-slate-800 flex items-center gap-1.5">
+                <i class="fa-solid fa-user-gear text-slate-600"></i>
+                <span>STAFF / TECHNICIAN ACCESS</span>
+              </div>
+              <div class="text-[11px] text-slate-600 leading-relaxed">
+                ✓ New STB Intake & Edit Tickets<br/>
+                ✓ Return / Dispatch & Print Labels<br/>
+                ✓ View & Edit Customer Directory<br/>
+                ✕ <span class="text-rose-600 font-bold">Blocked:</span> Excel Import, Reports, Users & Clear Data
+              </div>
+            </div>
+          </div>
+
           <div class="overflow-x-auto border border-slate-200 rounded-2xl">
             <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
                   <th class="py-3 px-4">User</th>
-                  <th class="py-3 px-4">Role</th>
+                  <th class="py-3 px-4">Role & Permissions</th>
                   <th class="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -2093,6 +2127,10 @@
     }
 
     function openMergeDuplicatesModal() {
+      if (!currentUser || currentUser.role !== 'admin') {
+        showToast('Access Denied: Only Admin can merge duplicate profiles.', 'error');
+        return;
+      }
       renderDuplicateGroupsUI();
       const modal = document.getElementById('mergeDuplicatesModal');
       modal.classList.remove('hidden');
@@ -2860,10 +2898,14 @@
 
       const reportsTabBtn = document.getElementById('tabBtn-reports');
       const usersTabBtn = document.getElementById('tabBtn-users');
+      const importExcelBtn = document.getElementById('btnImportExcel');
+      const mergeDuplicatesBtn = document.getElementById('btnMergeDuplicates');
       const clearDataBtn = document.getElementById('btnClearAllData');
 
       if (reportsTabBtn) reportsTabBtn.classList.toggle('hidden', !isAdmin);
       if (usersTabBtn) usersTabBtn.classList.toggle('hidden', !isAdmin);
+      if (importExcelBtn) importExcelBtn.classList.toggle('hidden', !isAdmin);
+      if (mergeDuplicatesBtn) mergeDuplicatesBtn.classList.toggle('hidden', !isAdmin);
       if (clearDataBtn) clearDataBtn.classList.toggle('hidden', !isAdmin);
 
       renderAll();
@@ -2897,29 +2939,57 @@
     function renderUsersTable() {
       const tbody = document.getElementById('usersTableBody');
       if (!tbody) return;
-      tbody.innerHTML = appUsers.map(u => `
-        <tr class="hover:bg-slate-50">
-          <td class="py-3 px-4">
-            <div class="text-xs font-bold text-slate-900">${escapeHTML(u.fullName)}</div>
-            <div class="text-[11px] font-mono text-slate-500">@${escapeHTML(u.username)}</div>
-          </td>
-          <td class="py-3 px-4">
-            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${u.role === 'admin' ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-700'}">
-              ${escapeHTML(u.role)}
-            </span>
-          </td>
-          <td class="py-3 px-4 text-right space-x-1.5">
-            <button type="button" onclick="openChangePasswordModal('${escapeHTML(u.id)}')" class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold">
-              Password
-            </button>
-            ${u.username !== 'admin' ? `
-              <button type="button" onclick="deleteUserAccount('${escapeHTML(u.id)}')" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold">
-                Delete
+      tbody.innerHTML = appUsers.map(u => {
+        const isAdminRole = u.role === 'admin';
+        const permSummary = isAdminRole
+          ? 'Full Access (Import Excel, Reports, Users, Backups)'
+          : 'Staff Access (Intake, Dispatch, Labels • No Excel Import)';
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="py-3 px-4">
+              <div class="text-xs font-bold text-slate-900">${escapeHTML(u.fullName)}</div>
+              <div class="text-[11px] font-mono text-slate-500">@${escapeHTML(u.username)}</div>
+            </td>
+            <td class="py-3 px-4">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${isAdminRole ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-700'}">
+                  ${escapeHTML(u.role)}
+                </span>
+                ${u.username !== 'admin' ? `
+                  <select onchange="changeUserRole('${escapeHTML(u.id)}', this.value)" class="rounded-lg border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                    <option value="staff" ${!isAdminRole ? 'selected' : ''}>Staff</option>
+                    <option value="admin" ${isAdminRole ? 'selected' : ''}>Admin</option>
+                  </select>
+                ` : ''}
+              </div>
+              <div class="text-[10px] text-slate-500 mt-1">${escapeHTML(permSummary)}</div>
+            </td>
+            <td class="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+              <button type="button" onclick="openChangePasswordModal('${escapeHTML(u.id)}')" class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold">
+                Password
               </button>
-            ` : ''}
-          </td>
-        </tr>
-      `).join('');
+              ${u.username !== 'admin' ? `
+                <button type="button" onclick="deleteUserAccount('${escapeHTML(u.id)}')" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold">
+                  Delete
+                </button>
+              ` : ''}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function changeUserRole(userId, newRole) {
+      if (!currentUser || currentUser.role !== 'admin') {
+        showToast('Access Denied: Only Admin can change user roles.', 'error');
+        return;
+      }
+      const u = appUsers.find(x => x.id === userId);
+      if (!u || u.username === 'admin') return;
+      u.role = newRole === 'admin' ? 'admin' : 'staff';
+      await saveState();
+      renderUsersTable();
+      showToast(`Access role for "${u.username}" updated to ${u.role.toUpperCase()}!`, 'success');
     }
 
     document.getElementById('createUserForm').addEventListener('submit', async function(e) {
@@ -3620,9 +3690,13 @@
     }
 
     // =========================================================================
-    // EXCEL IMPORT (.XLSX / .XLS / .CSV) WITH DEDUPLICATION
+    // EXCEL IMPORT (.XLSX / .XLS / .CSV) — ADMIN ONLY
     // =========================================================================
     function openExcelModal() {
+      if (!currentUser || currentUser.role !== 'admin') {
+        showToast('Access Denied: Only Admin can import Excel data.', 'error');
+        return;
+      }
       document.getElementById('excelFileInput').value = '';
       document.getElementById('excelStartRowInput').value = '';
       document.getElementById('excelEndRowInput').value = '';
@@ -3847,6 +3921,11 @@
     }
 
     function handleExcelFileSelect(event) {
+      if (!currentUser || currentUser.role !== 'admin') {
+        showToast('Access Denied: Only Admin can import Excel data.', 'error');
+        event.target.value = '';
+        return;
+      }
       const file = event.target.files[0];
       if (!file) return;
       const reader = new FileReader();
@@ -3865,6 +3944,10 @@
     }
 
     async function confirmExcelImport() {
+      if (!currentUser || currentUser.role !== 'admin') {
+        showToast('Access Denied: Only Admin can import Excel data.', 'error');
+        return;
+      }
       if (!pendingExcelImport || pendingExcelImport.length === 0) {
         showToast('No new records to import.', 'info');
         closeExcelModal();
