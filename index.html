@@ -74,10 +74,16 @@
       }
       html, body {
         width: 100% !important;
-        height: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
+        overflow: visible !important;
+      }
+      body.printing-label, body.printing-label html,
+      body.printing-batch-a4, body.printing-batch-a4 html {
+        height: 100% !important;
         overflow: hidden !important;
       }
       .no-print {
@@ -163,16 +169,23 @@
         outline-offset: 2mm;
       }
 
-      /* A4 Report PDF Print Mode */
+      /* A4 Report PDF Print Mode (Full Multi-Page Support) */
+      body.printing-a4-report {
+        display: block !important;
+        height: auto !important;
+        overflow: visible !important;
+      }
       body.printing-a4-report > *:not(#a4ReportPrintContainer) {
         display: none !important;
       }
       body.printing-a4-report #a4ReportPrintContainer {
         display: block !important;
+        position: static !important;
         width: 100% !important;
         max-width: 100% !important;
+        height: auto !important;
         margin: 0 !important;
-        padding: 4mm !important;
+        padding: 2mm !important;
         background: #ffffff !important;
         color: #0f172a !important;
         box-sizing: border-box !important;
@@ -184,6 +197,7 @@
         table-layout: fixed !important;
         border-collapse: collapse !important;
         font-size: 8.5px !important;
+        page-break-inside: auto !important;
       }
       body.printing-a4-report th,
       body.printing-a4-report td {
@@ -200,6 +214,9 @@
       }
       body.printing-a4-report thead {
         display: table-header-group !important;
+      }
+      body.printing-a4-report tfoot {
+        display: table-row-group !important;
       }
       body.printing-a4-report tr {
         break-inside: avoid !important;
@@ -253,8 +270,13 @@
         </div>
         <div>
           <h1 class="text-xl font-black text-slate-900 tracking-tight">STB ServicePro</h1>
-          <p class="text-xs font-medium text-slate-500">Freesat Service Center Sign In</p>
+          <p class="text-xs font-medium text-slate-500">Freesat Service Center — Anywhere Cloud & Network Login</p>
         </div>
+      </div>
+
+      <div id="loginSyncStatus" class="px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+        <span>Connecting to Cloud & Central Database...</span>
       </div>
 
       <form id="loginForm" class="space-y-4">
@@ -641,17 +663,7 @@
             </div>
             <div class="sm:col-span-2 lg:col-span-3">
               <label class="block text-xs font-bold text-slate-700 mb-1">Reported Fault *</label>
-              <input type="text" id="faultNotes" required autocomplete="off" placeholder="Type any reported fault manually or tap a quick fault below..." class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-              <div class="mt-2 flex flex-wrap items-center gap-1.5" id="quickFaultChips">
-                <span class="text-[11px] font-semibold text-slate-400 mr-1">Quick Tap:</span>
-                <button type="button" onclick="setIntakeFault('No Power')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">No Power</button>
-                <button type="button" onclick="setIntakeFault('No Signal')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">No Signal</button>
-                <button type="button" onclick="setIntakeFault('Boot Loop / Stuck on Logo')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">Boot Loop</button>
-                <button type="button" onclick="setIntakeFault('No Display / HDMI Fault')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">No Display</button>
-                <button type="button" onclick="setIntakeFault('Remote / IR Sensor Issue')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">Remote / IR</button>
-                <button type="button" onclick="setIntakeFault('Software / Firmware Issue')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">Software</button>
-                <button type="button" onclick="setIntakeFault('Rework')" class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-600 hover:text-white text-amber-800 border border-amber-200 text-[11px] font-bold transition">Rework</button>
-              </div>
+              <input type="text" id="faultNotes" required autocomplete="off" placeholder="Type reported fault manually (e.g. No Power / Dead, No Signal, Boot Loop...)" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
             </div>
           </div>
 
@@ -672,14 +684,6 @@
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <input type="text" id="ledgerSearchInput" oninput="renderRepairLogs(true)" placeholder="Search Serial, Customer, Ticket, Waybill..." class="w-60 rounded-xl border border-slate-300 px-3 py-1.5 text-xs" />
-            <select id="ledgerWarrantyFilter" onchange="renderRepairLogs(true)" class="rounded-xl border border-slate-300 bg-blue-50/60 text-blue-950 px-3 py-1.5 text-xs font-bold">
-              <option value="ALL">All Warranty Types</option>
-              <option value="In Warranty">In Warranty</option>
-              <option value="Warranty Expired">Warranty Expired</option>
-              <option value="Warranty Void">Warranty Void</option>
-              <option value="Beyond Economical Repair">Beyond Economical Repair</option>
-              <option value="Rework">Rework</option>
-            </select>
             <select id="ledgerStatusFilter" onchange="renderRepairLogs(true)" class="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-bold">
               <option value="ALL">All Statuses</option>
               <option value="In Repair">Pending / In Repair</option>
@@ -688,9 +692,6 @@
             <button type="button" onclick="openReturnLabelModal('')" class="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold">
               <i class="fa-solid fa-print mr-1"></i>Print Labels
             </button>
-            <button type="button" id="btnPrintSelectedLedgerA4" onclick="printSelectedLedgerTicketsA4()" class="hidden px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs">
-              <i class="fa-solid fa-table-cells-large mr-1"></i>Print Selected A4 (<span id="selectedLedgerCount">0</span>)
-            </button>
           </div>
         </div>
 
@@ -698,9 +699,6 @@
           <table class="w-full text-left border-collapse text-xs">
             <thead>
               <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
-                <th class="py-3 px-2.5 w-9 text-center">
-                  <input type="checkbox" id="selectAllLedgerCheckbox" onchange="toggleSelectAllVisibleLedger(this.checked)" title="Select visible rows" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-                </th>
                 <th class="py-3 px-3">Ticket & Date</th>
                 <th class="py-3 px-3">Customer & Phone</th>
                 <th class="py-3 px-3">STB Serial & Model</th>
@@ -977,7 +975,7 @@
         <div class="space-y-2 pt-2">
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-bold text-slate-900">Filtered Report Records (<span id="repPreviewTableCount">0</span>)</h3>
-            <span class="text-[11px] text-slate-500">Click "A4 PDF Report" above to print or save as A4 PDF</span>
+            <span class="text-[11px] text-slate-500">Screen shows top 200 • "A4 PDF Report" exports ALL filtered records across multiple pages</span>
           </div>
           <div class="overflow-x-auto border border-slate-200 rounded-2xl max-h-96 overflow-y-auto">
             <table class="w-full text-left border-collapse text-xs">
@@ -1087,9 +1085,6 @@
             </button>
             <button type="button" onclick="copyShareableWorkspaceLink()" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition">
               <i class="fa-solid fa-link mr-1"></i>Copy Anywhere Access Link
-            </button>
-            <button type="button" onclick="openFirestoreRulesModal()" class="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition">
-              <i class="fa-solid fa-key mr-1"></i>Firestore Rules
             </button>
           </div>
           <p class="text-[11px] text-slate-500 leading-relaxed">
@@ -1386,73 +1381,6 @@
     </div>
   </div>
 
-  <!-- Firebase Firestore Rules Helper Modal -->
-  <div id="firestoreRulesModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 border border-slate-200 max-h-[90vh] overflow-y-auto space-y-4">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-        <div>
-          <h3 class="text-base font-bold text-slate-900">Firebase Firestore Rules (Cloud Live Sync)</h3>
-          <p class="text-xs text-slate-500">Firebase Console → Firestore Database → Rules තුළ පහත code එක Paste කර Publish කරන්න</p>
-        </div>
-        <button type="button" onclick="closeFirestoreRulesModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"><i class="fa-solid fa-xmark text-lg"></i></button>
-      </div>
-      <pre id="firestoreRulesCodeBlock" class="p-3.5 rounded-xl bg-slate-900 text-emerald-300 text-[11px] font-mono overflow-x-auto leading-relaxed select-all">rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /artifacts/{document=**} {
-      allow read, write: if true;
-    }
-
-    function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role;
-    }
-
-    function isAdmin() {
-      return request.auth != null && (
-        request.auth.token.email == "lalanadesilva@googlemail.com" ||
-        request.auth.token.email == "admin@freesat.lk" ||
-        getUserRole() == "admin"
-      );
-    }
-
-    function isTech() {
-      return request.auth != null && (
-        request.auth.token.email == "tech@freesat.lk" ||
-        getUserRole() == "technician"
-      );
-    }
-
-    match /users/{email} {
-      allow read: if request.auth != null;
-      allow write: if isAdmin();
-    }
-
-    match /inventory/{itemId} {
-      allow read: if request.auth != null;
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (
-        isTech() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['qty']) &&
-        request.resource.data.qty &lt;= resource.data.qty
-      );
-    }
-
-    match /repairs/{repairId} {
-      allow read: if request.auth != null;
-      allow create: if isAdmin() || isTech();
-      allow update, delete: if isAdmin();
-    }
-  }
-}</pre>
-      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
-        <button type="button" onclick="closeFirestoreRulesModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100">Close</button>
-        <button type="button" onclick="copyFirestoreRulesToClipboard()" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700">
-          <i class="fa-solid fa-copy mr-1"></i>Copy Firestore Rules
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- ===================================================================== -->
   <!-- APPLICATION LOGIC (FIREBASE CHUNKED CLOUD SYNC + AUTO BACKUPS + LAN)  -->
   <!-- ===================================================================== -->
@@ -1545,7 +1473,6 @@ service cloud.firestore {
     let pendingExcelImport = null;
     let lastLoadedExcelRows = null;
     let batchPrintTicketIds = [];
-    let selectedLedgerTicketIds = new Set();
     let currentModalLabelTicketId = null;
 
     let autoBackupConfig = {
@@ -1711,6 +1638,9 @@ service cloud.firestore {
       return repairs.length !== beforeR || customers.length !== beforeC;
     }
 
+    // =========================================================================
+    // CHUNKED FIRESTORE HELPERS (BYPASSES 1MB SINGLE-DOC LIMIT FOR 5,000+ ROWS)
+    // =========================================================================
     function splitStringIntoChunks(str, maxBytes = 650000) {
       const chunks = [];
       for (let i = 0; i < str.length; i += maxBytes) {
@@ -1773,6 +1703,9 @@ service cloud.firestore {
       return null;
     }
 
+    // =========================================================================
+    // REPORTS, WARRANTY BREAKDOWN & A4 PDF / EXCEL EXPORT
+    // =========================================================================
     function handleReportFilterTypeChange() {
       const type = document.getElementById('reportFilterType').value;
       document.getElementById('reportMonthPicker').classList.toggle('hidden', type !== 'MONTH');
@@ -2063,19 +1996,23 @@ service cloud.firestore {
 
       const dynamicStyle = document.createElement('style');
       dynamicStyle.id = 'tempA4ReportPageRule';
-      dynamicStyle.textContent = `@media print { @page { size: A4 landscape; margin: 7mm; } }`;
+      dynamicStyle.textContent = `@media print { @page { size: A4 landscape; margin: 7mm; } html, body { height: auto !important; overflow: visible !important; display: block !important; } }`;
       document.head.appendChild(dynamicStyle);
 
       document.body.classList.remove('printing-label', 'printing-batch-a4');
       document.body.classList.add('printing-a4-report');
 
-      window.print();
-
-      setTimeout(() => {
+      const cleanupA4Print = () => {
         document.body.classList.remove('printing-a4-report');
         const tempStyle = document.getElementById('tempA4ReportPageRule');
         if (tempStyle) tempStyle.remove();
-      }, 600);
+        window.removeEventListener('afterprint', cleanupA4Print);
+      };
+      window.addEventListener('afterprint', cleanupA4Print);
+
+      setTimeout(() => {
+        window.print();
+      }, 100);
     }
 
     function exportFilteredReportToExcel() {
@@ -2197,6 +2134,9 @@ service cloud.firestore {
       showToast(`Customer "${newName}" updated across all records!`, 'success');
     });
 
+    // =========================================================================
+    // MERGE DUPLICATE CUSTOMERS (SAME NAME OR PHONE)
+    // =========================================================================
     function getDuplicateCustomerGroups() {
       const byNameMap = new Map();
       customers.forEach(c => {
@@ -2324,6 +2264,9 @@ service cloud.firestore {
       showToast(`Successfully merged ${totalMerged} duplicate customer profiles!`, 'success');
     }
 
+    // =========================================================================
+    // STORAGE, CLOUD SYNC & CENTRAL LAN DATABASE ENGINE
+    // =========================================================================
     function loadStateFromLocal() {
       try {
         const rawC = localStorage.getItem(STORAGE_KEY_CUSTOMERS);
@@ -2695,37 +2638,9 @@ service cloud.firestore {
       document.body.removeChild(ta);
     }
 
-    function openFirestoreRulesModal() {
-      const modal = document.getElementById('firestoreRulesModal');
-      if (!modal) return;
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
-    }
-
-    function closeFirestoreRulesModal() {
-      const modal = document.getElementById('firestoreRulesModal');
-      if (!modal) return;
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-    }
-
-    function copyFirestoreRulesToClipboard() {
-      const preEl = document.getElementById('firestoreRulesCodeBlock');
-      if (!preEl) return;
-      const rulesText = preEl.textContent || '';
-      const ta = document.createElement('textarea');
-      ta.value = rulesText;
-      document.body.appendChild(ta);
-      ta.select();
-      try {
-        document.execCommand('copy');
-        showToast('Firestore Rules copied! Paste into Firebase Console → Rules & click Publish.', 'success');
-      } catch (e) {
-        showToast('Please select and copy the rules text manually.', 'warning');
-      }
-      document.body.removeChild(ta);
-    }
-
+    // =========================================================================
+    // AUTOMATIC & MANUAL BACKUP VAULT (CHUNKED FOR CLOUD SAFETY)
+    // =========================================================================
     function toggleAutoBackupSetting() {
       autoBackupConfig.enabled = document.getElementById('autoBackupEnabledToggle').checked;
       saveStateToLocal();
@@ -2951,6 +2866,9 @@ service cloud.firestore {
       event.target.value = '';
     }
 
+    // =========================================================================
+    // AUTHENTICATION, ROLE PERMISSIONS & TAB NAVIGATION
+    // =========================================================================
     document.getElementById('loginForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const uname = document.getElementById('loginUsername').value.trim().toLowerCase();
@@ -3172,16 +3090,12 @@ service cloud.firestore {
       showToast('User account removed.', 'info');
     }
 
+    // =========================================================================
+    // TAB 1: INTAKE FORM, QUICK SEARCH & SERVICE LEDGER
+    // =========================================================================
     function updateModelSuggestions() {
       const el = document.getElementById('stbModelSuggestions');
       if (!el) return;
-    }
-
-    function setIntakeFault(faultText) {
-      const input = document.getElementById('faultNotes');
-      if (!input) return;
-      input.value = faultText;
-      input.focus();
     }
 
     function toggleIntakeWarrantyVoidCondition() {
@@ -3342,60 +3256,6 @@ service cloud.firestore {
       renderRepairLogs(false);
     }
 
-    function toggleLedgerTicketSelection(ticketId, checked) {
-      if (!ticketId) return;
-      if (checked) {
-        selectedLedgerTicketIds.add(ticketId);
-      } else {
-        selectedLedgerTicketIds.delete(ticketId);
-      }
-      updateSelectedLedgerToolbarUI();
-    }
-
-    function toggleSelectAllVisibleLedger(checked) {
-      const checkboxes = document.querySelectorAll('#repairLedgerBody input[type="checkbox"][data-ticket-id]');
-      checkboxes.forEach(cb => {
-        const tid = cb.getAttribute('data-ticket-id');
-        cb.checked = checked;
-        if (tid) {
-          if (checked) selectedLedgerTicketIds.add(tid);
-          else selectedLedgerTicketIds.delete(tid);
-        }
-      });
-      updateSelectedLedgerToolbarUI();
-    }
-
-    function updateSelectedLedgerToolbarUI() {
-      const btn = document.getElementById('btnPrintSelectedLedgerA4');
-      const countEl = document.getElementById('selectedLedgerCount');
-      const selectAllCb = document.getElementById('selectAllLedgerCheckbox');
-      if (countEl) countEl.textContent = selectedLedgerTicketIds.size;
-      if (btn) btn.classList.toggle('hidden', selectedLedgerTicketIds.size === 0);
-
-      const checkboxes = Array.from(document.querySelectorAll('#repairLedgerBody input[type="checkbox"][data-ticket-id]'));
-      if (selectAllCb) {
-        if (checkboxes.length === 0) {
-          selectAllCb.checked = false;
-          selectAllCb.indeterminate = false;
-        } else {
-          const allChecked = checkboxes.every(cb => cb.checked);
-          const someChecked = checkboxes.some(cb => cb.checked);
-          selectAllCb.checked = allChecked;
-          selectAllCb.indeterminate = !allChecked && someChecked;
-        }
-      }
-    }
-
-    function printSelectedLedgerTicketsA4() {
-      if (selectedLedgerTicketIds.size === 0) {
-        showToast('Please tick one or more STB tickets in the ledger first.', 'warning');
-        return;
-      }
-      batchPrintTicketIds = Array.from(selectedLedgerTicketIds);
-      renderBatchQueueUI();
-      printBatchA4Labels();
-    }
-
     function renderRepairLogs(resetPage = false) {
       if (resetPage) ledgerCurrentPage = 1;
       const tbody = document.getElementById('repairLedgerBody');
@@ -3403,11 +3263,9 @@ service cloud.firestore {
 
       const q = (document.getElementById('ledgerSearchInput')?.value || '').trim().toLowerCase();
       const statusFilter = document.getElementById('ledgerStatusFilter')?.value || 'ALL';
-      const warrantyFilter = document.getElementById('ledgerWarrantyFilter')?.value || 'ALL';
 
       const filtered = repairs.filter(r => {
         if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
-        if (warrantyFilter !== 'ALL' && normalizeWarrantyCategory(r.warrantyStatus) !== warrantyFilter) return false;
         if (!q) return true;
         return (
           (r.stbSerial || '').toLowerCase().includes(q) ||
@@ -3427,8 +3285,7 @@ service cloud.firestore {
       document.getElementById('ledgerPageBadge').textContent = `Page ${ledgerCurrentPage} / ${totalPages}`;
 
       if (slice.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No repair tickets found.</td></tr>`;
-        updateSelectedLedgerToolbarUI();
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-400">No repair tickets found.</td></tr>`;
         return;
       }
 
@@ -3441,12 +3298,8 @@ service cloud.firestore {
             : wNorm === 'Warranty Void'
               ? 'bg-rose-100 text-rose-800'
               : 'bg-slate-200 text-slate-800';
-        const isChecked = selectedLedgerTicketIds.has(r.ticketId);
         return `
-          <tr class="hover:bg-slate-50 ${isChecked ? 'bg-amber-50/50' : ''}">
-            <td class="py-3 px-2.5 text-center">
-              <input type="checkbox" data-ticket-id="${escapeHTML(r.ticketId)}" ${isChecked ? 'checked' : ''} onchange="toggleLedgerTicketSelection('${escapeHTML(r.ticketId)}', this.checked)" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-            </td>
+          <tr class="hover:bg-slate-50">
             <td class="py-3 px-3 whitespace-nowrap">
               <div class="font-mono font-bold text-slate-900">${escapeHTML(r.ticketId)}</div>
               <div class="text-[11px] font-mono text-slate-500">${escapeHTML(r.dateReceived)}</div>
@@ -3478,49 +3331,10 @@ service cloud.firestore {
               <button type="button" onclick="openReturnLabelModal('${escapeHTML(r.ticketId)}')" class="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">
                 Label
               </button>
-              <button type="button" onclick="deleteRepairTicketPrompt('${escapeHTML(r.ticketId)}')" title="Delete Ticket" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 font-bold transition">
-                <i class="fa-solid fa-trash-can"></i>
-              </button>
             </td>
           </tr>
         `;
       }).join('');
-      updateSelectedLedgerToolbarUI();
-    }
-
-    function deleteRepairTicketPrompt(ticketId) {
-      const target = repairs.find(r => r.ticketId === ticketId);
-      if (!target) return;
-      document.getElementById('confirmModalTitle').textContent = `Delete Ticket ${target.ticketId}?`;
-      document.getElementById('confirmModalMessage').textContent =
-        `Are you sure you want to permanently delete ticket ${target.ticketId} (STB Serial: ${target.stbSerial || '—'}, Customer: ${target.customerName || '—'})?`;
-      confirmModalCallback = async () => {
-        const idx = repairs.findIndex(r => r.ticketId === ticketId);
-        if (idx === -1) return;
-        const removed = repairs[idx];
-        repairs.splice(idx, 1);
-        selectedLedgerTicketIds.delete(ticketId);
-        batchPrintTicketIds = batchPrintTicketIds.filter(id => id !== ticketId);
-
-        if (removed.customerId && removed.stbSerial) {
-          const hasOtherWithSameSerial = repairs.some(
-            r => r.customerId === removed.customerId && r.stbSerial === removed.stbSerial
-          );
-          if (!hasOtherWithSameSerial) {
-            const cust = customers.find(c => c.id === removed.customerId);
-            if (cust && Array.isArray(cust.serials)) {
-              cust.serials = cust.serials.filter(s => s !== removed.stbSerial);
-            }
-          }
-        }
-
-        await saveState();
-        renderAll();
-        showToast(`Ticket ${removed.ticketId} deleted!`, 'info');
-      };
-      const modal = document.getElementById('confirmModal');
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
     }
 
     function openEditTicketModal(ticketId) {
@@ -3592,6 +3406,9 @@ service cloud.firestore {
       showToast(`Ticket ${r.ticketId} updated!`, 'success');
     });
 
+    // =========================================================================
+    // TAB 2: RETURN / DISPATCH & BARCODE RENDERING
+    // =========================================================================
     function renderBarcodeOnSvg(svgEl, wrapEl, codeText) {
       if (!svgEl || !wrapEl) return;
       const clean = String(codeText || '').trim().toUpperCase();
@@ -3716,6 +3533,9 @@ service cloud.firestore {
       showToast(`STB ${r.stbSerial} marked as Returned!`, 'success');
     });
 
+    // =========================================================================
+    // PRINTABLE RETURN LABEL MODAL (SINGLE 4x6 & BATCH A4 4-PER-PAGE)
+    // =========================================================================
     function openReturnLabelModal(ticketId) {
       const target = repairs.find(r => r.ticketId === ticketId) || repairs[0];
       if (target) {
@@ -3900,6 +3720,9 @@ service cloud.firestore {
       }, 600);
     }
 
+    // =========================================================================
+    // EXCEL IMPORT (.XLSX / .XLS / .CSV) — ADMIN ONLY
+    // =========================================================================
     function openExcelModal() {
       if (!currentUser || currentUser.role !== 'admin') {
         showToast('Access Denied: Only Admin can import Excel data.', 'error');
@@ -4192,6 +4015,9 @@ service cloud.firestore {
       pendingExcelImport = null;
     }
 
+    // =========================================================================
+    // CONFIRMATION MODAL & CLEAR ALL DATA (ADMIN ONLY)
+    // =========================================================================
     let confirmModalCallback = null;
 
     function closeConfirmModal() {
@@ -4227,6 +4053,9 @@ service cloud.firestore {
       modal.classList.add('flex');
     }
 
+    // =========================================================================
+    // MASTER RENDER & INITIALIZATION
+    // =========================================================================
     function renderKPIs() {
       const total = repairs.length;
       const returned = repairs.filter(r => r.status === 'Returned').length;
