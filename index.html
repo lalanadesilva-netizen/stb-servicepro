@@ -655,6 +655,7 @@
                 <button type="button" onclick="setIntakeFault('No Display / HDMI Fault')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">No Display</button>
                 <button type="button" onclick="setIntakeFault('Remote / IR Sensor Issue')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">Remote / IR</button>
                 <button type="button" onclick="setIntakeFault('Software / Firmware Issue')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-[11px] font-bold transition">Software</button>
+                <button type="button" onclick="setIntakeFault('Rework')" class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-600 hover:text-white text-amber-800 border border-amber-200 text-[11px] font-bold transition">Rework</button>
               </div>
             </div>
           </div>
@@ -676,6 +677,14 @@
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <input type="text" id="ledgerSearchInput" oninput="renderRepairLogs(true)" placeholder="Search Serial, Customer, Ticket, Waybill..." class="w-60 rounded-xl border border-slate-300 px-3 py-1.5 text-xs" />
+            <select id="ledgerWarrantyFilter" onchange="renderRepairLogs(true)" class="rounded-xl border border-slate-300 bg-blue-50/60 text-blue-950 px-3 py-1.5 text-xs font-bold">
+              <option value="ALL">All Warranty Types</option>
+              <option value="In Warranty">In Warranty</option>
+              <option value="Warranty Expired">Warranty Expired</option>
+              <option value="Warranty Void">Warranty Void</option>
+              <option value="Beyond Economical Repair">Beyond Economical Repair</option>
+              <option value="Rework">Rework</option>
+            </select>
             <select id="ledgerStatusFilter" onchange="renderRepairLogs(true)" class="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-bold">
               <option value="ALL">All Statuses</option>
               <option value="In Repair">Pending / In Repair</option>
@@ -3338,9 +3347,11 @@ service cloud.firestore {
 
       const q = (document.getElementById('ledgerSearchInput')?.value || '').trim().toLowerCase();
       const statusFilter = document.getElementById('ledgerStatusFilter')?.value || 'ALL';
+      const warrantyFilter = document.getElementById('ledgerWarrantyFilter')?.value || 'ALL';
 
       const filtered = repairs.filter(r => {
         if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
+        if (warrantyFilter !== 'ALL' && normalizeWarrantyCategory(r.warrantyStatus) !== warrantyFilter) return false;
         if (!q) return true;
         return (
           (r.stbSerial || '').toLowerCase().includes(q) ||
