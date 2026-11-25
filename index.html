@@ -3478,11 +3478,49 @@ service cloud.firestore {
               <button type="button" onclick="openReturnLabelModal('${escapeHTML(r.ticketId)}')" class="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold">
                 Label
               </button>
+              <button type="button" onclick="deleteRepairTicketPrompt('${escapeHTML(r.ticketId)}')" title="Delete Ticket" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 font-bold transition">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
             </td>
           </tr>
         `;
       }).join('');
       updateSelectedLedgerToolbarUI();
+    }
+
+    function deleteRepairTicketPrompt(ticketId) {
+      const target = repairs.find(r => r.ticketId === ticketId);
+      if (!target) return;
+      document.getElementById('confirmModalTitle').textContent = `Delete Ticket ${target.ticketId}?`;
+      document.getElementById('confirmModalMessage').textContent =
+        `Are you sure you want to permanently delete ticket ${target.ticketId} (STB Serial: ${target.stbSerial || '—'}, Customer: ${target.customerName || '—'})?`;
+      confirmModalCallback = async () => {
+        const idx = repairs.findIndex(r => r.ticketId === ticketId);
+        if (idx === -1) return;
+        const removed = repairs[idx];
+        repairs.splice(idx, 1);
+        selectedLedgerTicketIds.delete(ticketId);
+        batchPrintTicketIds = batchPrintTicketIds.filter(id => id !== ticketId);
+
+        if (removed.customerId && removed.stbSerial) {
+          const hasOtherWithSameSerial = repairs.some(
+            r => r.customerId === removed.customerId && r.stbSerial === removed.stbSerial
+          );
+          if (!hasOtherWithSameSerial) {
+            const cust = customers.find(c => c.id === removed.customerId);
+            if (cust && Array.isArray(cust.serials)) {
+              cust.serials = cust.serials.filter(s => s !== removed.stbSerial);
+            }
+          }
+        }
+
+        await saveState();
+        renderAll();
+        showToast(`Ticket ${removed.ticketId} deleted!`, 'info');
+      };
+      const modal = document.getElementById('confirmModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
     }
 
     function openEditTicketModal(ticketId) {
