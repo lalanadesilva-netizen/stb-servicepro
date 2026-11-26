@@ -66,19 +66,37 @@
       background-color: #f1f5f9;
       color: #0f172a;
     }
+
     @media print {
       @page {
         size: 4in 6in;
         margin: 0;
       }
+
       html, body {
         width: 100% !important;
-        height: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* Single 4x6 Thermal Label Print පමණක් 1 පිටුවකට සීමා කිරීම */
+      body.printing-label {
+        height: 100% !important;
         overflow: hidden !important;
       }
+
+      /* A4 Report සහ Batch A4 සඳහා පිටු සියල්ලම (Multi-page) Print වීමට ඉඩ දීම */
+      body.printing-a4-report,
+      body.printing-batch-a4 {
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+
       .no-print {
         display: none !important;
       }
@@ -130,12 +148,14 @@
       body.printing-batch-a4 #batchA4PrintContainer {
         display: block !important;
         width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
         background: #ffffff !important;
       }
       .a4-sheet-page {
-        width: 210mm;
-        height: 295mm;
-        padding: 6mm;
+        width: 196mm;
+        height: 280mm;
+        padding: 4mm;
         box-sizing: border-box;
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -162,19 +182,28 @@
         outline-offset: 2mm;
       }
 
-      /* A4 Report PDF Print Mode */
+      /* A4 Report PDF Print Mode (සියලුම පිටු Print වීමට) */
       body.printing-a4-report > *:not(#a4ReportPrintContainer) {
         display: none !important;
       }
       body.printing-a4-report #a4ReportPrintContainer {
+        position: static !important;
         display: block !important;
         width: 100% !important;
         max-width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
         margin: 0 !important;
-        padding: 4mm !important;
+        padding: 0 !important;
         background: #ffffff !important;
         color: #0f172a !important;
         box-sizing: border-box !important;
+        overflow: visible !important;
+      }
+      body.printing-a4-report #a4ReportPrintContainer * {
+        max-height: none !important;
+      }
+      body.printing-a4-report #a4ReportPrintContainer div {
         overflow: visible !important;
       }
       body.printing-a4-report table {
@@ -183,6 +212,7 @@
         table-layout: fixed !important;
         border-collapse: collapse !important;
         font-size: 8.5px !important;
+        page-break-inside: auto !important;
       }
       body.printing-a4-report th,
       body.printing-a4-report td {
