@@ -72,31 +72,14 @@
         size: 4in 6in;
         margin: 0;
       }
-
       html, body {
         width: 100% !important;
+        height: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-
-      /* Single 4x6 Thermal Label Print පමණක් 1 පිටුවකට සීමා කිරීම */
-      body.printing-label {
-        height: 100% !important;
         overflow: hidden !important;
       }
-
-      /* A4 Report සහ Batch A4 සඳහා පිටු සියල්ලම (Multi-page) Print වීමට ඉඩ දීම */
-      body.printing-a4-report,
-      body.printing-batch-a4 {
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
-        overflow: visible !important;
-      }
-
       .no-print {
         display: none !important;
       }
@@ -148,14 +131,12 @@
       body.printing-batch-a4 #batchA4PrintContainer {
         display: block !important;
         width: 100% !important;
-        height: auto !important;
-        overflow: visible !important;
         background: #ffffff !important;
       }
       .a4-sheet-page {
-        width: 196mm;
-        height: 280mm;
-        padding: 4mm;
+        width: 210mm;
+        height: 295mm;
+        padding: 6mm;
         box-sizing: border-box;
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -182,28 +163,19 @@
         outline-offset: 2mm;
       }
 
-      /* A4 Report PDF Print Mode (සියලුම පිටු Print වීමට) */
+      /* A4 Report PDF Print Mode */
       body.printing-a4-report > *:not(#a4ReportPrintContainer) {
         display: none !important;
       }
       body.printing-a4-report #a4ReportPrintContainer {
-        position: static !important;
         display: block !important;
         width: 100% !important;
         max-width: 100% !important;
-        height: auto !important;
-        max-height: none !important;
         margin: 0 !important;
-        padding: 0 !important;
+        padding: 4mm !important;
         background: #ffffff !important;
         color: #0f172a !important;
         box-sizing: border-box !important;
-        overflow: visible !important;
-      }
-      body.printing-a4-report #a4ReportPrintContainer * {
-        max-height: none !important;
-      }
-      body.printing-a4-report #a4ReportPrintContainer div {
         overflow: visible !important;
       }
       body.printing-a4-report table {
@@ -212,7 +184,6 @@
         table-layout: fixed !important;
         border-collapse: collapse !important;
         font-size: 8.5px !important;
-        page-break-inside: auto !important;
       }
       body.printing-a4-report th,
       body.printing-a4-report td {
@@ -1499,15 +1470,8 @@
     function getWorkspaceAppId() {
       const urlParams = new URLSearchParams(window.location.search);
       const paramWs = urlParams.get('ws');
-      if (paramWs && paramWs.trim()) {
-        try { localStorage.setItem('stb_servicepro_saved_ws_v1', paramWs.trim()); } catch (e) {}
-        return paramWs.trim();
-      }
-      try {
-        const savedWs = localStorage.getItem('stb_servicepro_saved_ws_v1');
-        if (savedWs && savedWs.trim()) return savedWs.trim();
-      } catch (e) {}
-      return 'freesat-stb-servicepro-v1';
+      if (paramWs) return paramWs.trim();
+      return typeof __app_id !== 'undefined' ? __app_id : 'freesat-stb-servicepro-v1';
     }
 
     function getTodayISO() {
@@ -2423,9 +2387,7 @@
           if (initialSnap.exists()) {
             const masterMeta = initialSnap.data();
             const remoteUpdatedAt = Number(masterMeta.updatedAt) || 0;
-            const remoteRepairCount = Number(masterMeta.repairCount) || 0;
-            const localIsEmpty = repairs.length === 0 && customers.length === 0;
-            const localHasNewerData = !localIsEmpty && localDataUpdatedAt > remoteUpdatedAt && repairs.length >= remoteRepairCount;
+            const localHasNewerData = (repairs.length > 0 || customers.length > 0) && localDataUpdatedAt > remoteUpdatedAt;
 
             if (localHasNewerData) {
               await saveState();
@@ -2441,7 +2403,7 @@
                 purgeBogusSummaryRecords();
                 saveStateToLocal(remoteUpdatedAt || Date.now());
                 lastSyncedPayloadHash = JSON.stringify({ c: customers.length, r: repairs.length, u: appUsers.length, t: remoteUpdatedAt });
-                renderAll();
+                if (currentUser) renderAll();
               }
             }
           } else if (repairs.length > 0 || customers.length > 0) {
@@ -2465,8 +2427,7 @@
           if (snap.exists() && !isApplyingRemoteSync && !isSavingToCloud && Date.now() >= suppressRemoteOverwriteUntil) {
             const meta = snap.data();
             const remoteUpdatedAt = Number(meta.updatedAt) || 0;
-            const localIsEmpty = repairs.length === 0 && customers.length === 0;
-            if (!localIsEmpty && remoteUpdatedAt < localDataUpdatedAt) {
+            if (remoteUpdatedAt < localDataUpdatedAt) {
               return;
             }
             const incomingHash = JSON.stringify({
@@ -2475,7 +2436,7 @@
               u: meta.users?.length,
               t: remoteUpdatedAt
             });
-            if (incomingHash !== lastSyncedPayloadHash || localIsEmpty) {
+            if (incomingHash !== lastSyncedPayloadHash) {
               try {
                 isApplyingRemoteSync = true;
                 const remote = await readChunkedStateFromFirestore(sdk, appId, meta);
@@ -2489,7 +2450,7 @@
                   purgeBogusSummaryRecords();
                   saveStateToLocal(remoteUpdatedAt || Date.now());
                   lastSyncedPayloadHash = incomingHash;
-                  renderAll();
+                  if (currentUser) renderAll();
                 }
               } catch (chunkErr) {
                 console.warn('Error assembling cloud chunks:', chunkErr);
