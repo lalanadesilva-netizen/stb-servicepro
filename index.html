@@ -32,38 +32,180 @@
 
     #print-page-footer { display: none; }
 
-    @@media print {
-  @page {
-    size: A4 portrait;
-    margin: 10mm;
-  }
-  html, body {
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    background: #ffffff !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  /* Scrollbars හෝ Height Limit ඇති සියලුම Containers නිදහස් කිරීම */
-  div, section, main, article, .overflow-hidden, .overflow-auto, .overflow-y-auto, .overflow-x-auto {
-    overflow: visible !important;
-    height: auto !important;
-    max-height: none !important;
-  }
-  /* Cards සහ Table Rows පිටු මැදින් කැඩී යාම වැළැක්වීම */
-  table {
-    width: 100% !important;
-    page-break-inside: auto !important;
-  }
-  thead {
-    display: table-header-group !important;
-  }
-  tr, .card, .chart-box {
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
-  }
-}
+    @media print {
+      @page {
+        size: 4in 6in;
+        margin: 0;
+      }
+      /* A4 Report සහ Batch A4 සඳහා පිටුව A4 ප්‍රමාණයට සැකසීම */
+      @page a4page {
+        size: A4 portrait;
+        margin: 10mm;
+      }
+
+      html, body {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* 4x6 Label Print කරන විට පමණක් 1 පිටුවකට සීමා කිරීම */
+      body.printing-label {
+        height: 100% !important;
+        overflow: hidden !important;
+      }
+
+      /* A4 Report සහ Batch A4 Print කරන විට පිටු සියල්ලම (Multi-page) විවෘත කිරීම */
+      body.printing-a4-report,
+      body.printing-batch-a4 {
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      /* Single 4x6 Thermal Label Print */
+      body.printing-label > *:not(#returnLabelModal) {
+        display: none !important;
+      }
+      body.printing-label #returnLabelModal {
+        position: fixed !important;
+        inset: 0 !important;
+        background: #ffffff !important;
+        padding: 0.14in !important;
+        margin: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+      }
+      body.printing-label #returnLabelModalCard {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 auto !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        max-height: none !important;
+        overflow: visible !important;
+      }
+      body.printing-label #printableAddressLabel {
+        width: 3.65in !important;
+        max-width: 100% !important;
+        height: 5.55in !important;
+        max-height: 5.65in !important;
+        margin: 0 auto !important;
+        padding: 0.16in !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        page-break-inside: avoid !important;
+      }
+
+      /* Batch A4 (4 Labels per A4 Sheet - 2x2 Grid) */
+      body.printing-batch-a4 > *:not(#batchA4PrintContainer) {
+        display: none !important;
+      }
+      body.printing-batch-a4 #batchA4PrintContainer {
+        page: a4page;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: #ffffff !important;
+      }
+      .a4-sheet-page {
+        width: 190mm;
+        height: 275mm;
+        padding: 2mm;
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 5mm;
+        page-break-after: always;
+        break-after: page;
+        background: #ffffff;
+      }
+      .a4-sheet-page:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .a4-grid-label-card {
+        border: 2px solid #0f172a;
+        border-radius: 10px;
+        padding: 4.5mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-sizing: border-box;
+        overflow: hidden;
+        outline: 1px dashed #94a3b8;
+        outline-offset: 2mm;
+      }
+
+      /* A4 Report PDF Print Mode (සියලුම පිටු Print වීමට) */
+      body.printing-a4-report > *:not(#a4ReportPrintContainer) {
+        display: none !important;
+      }
+      body.printing-a4-report #a4ReportPrintContainer {
+        page: a4page;
+        position: static !important;
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        box-sizing: border-box !important;
+        overflow: visible !important;
+      }
+      body.printing-a4-report #a4ReportPrintContainer div,
+      body.printing-a4-report #a4ReportPrintContainer section {
+        overflow: visible !important;
+        height: auto !important;
+        max-height: none !important;
+      }
+      body.printing-a4-report table {
+        width: 100% !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+        font-size: 8.5px !important;
+        page-break-inside: auto !important;
+      }
+      body.printing-a4-report th,
+      body.printing-a4-report td {
+        border: 1px solid #cbd5e1 !important;
+        padding: 3.5px 4px !important;
+        text-align: left !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        vertical-align: top !important;
+      }
+      body.printing-a4-report th {
+        background-color: #f1f5f9 !important;
+        font-weight: 800 !important;
+      }
+      body.printing-a4-report thead {
+        display: table-header-group !important;
+      }
+      body.printing-a4-report tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen pb-16 sm:pb-0">
